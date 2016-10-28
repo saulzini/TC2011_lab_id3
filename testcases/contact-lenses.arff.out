@@ -1,0 +1,23 @@
+tear-prod-rate: reduced
+  ANSWER: none
+tear-prod-rate: normal
+  astigmatism: no
+    age: young
+      ANSWER: soft
+    age: pre-presbyopic
+      ANSWER: soft
+    age: presbyopic
+      spectacle-prescrip: myope
+        ANSWER: none
+      spectacle-prescrip: hypermetrope
+        ANSWER: soft
+  astigmatism: yes
+    spectacle-prescrip: myope
+      ANSWER: hard
+    spectacle-prescrip: hypermetrope
+      age: young
+        ANSWER: hard
+      age: pre-presbyopic
+        ANSWER: none
+      age: presbyopic
+        ANSWER: none
