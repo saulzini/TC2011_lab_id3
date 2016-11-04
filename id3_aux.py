@@ -1,13 +1,6 @@
 import fileinput
 import math
-import copy
 import re
-
-class Attribute:
-    def __init__(self, label, index, values):
-        self.label = label
-        self.index = index
-        self.values = values
 
 data = []
 attributes = []
@@ -16,98 +9,119 @@ def readData():
     input = fileinput.input()
     global goal_key
     state = 0
-    index = 0
     for line in input:
         if state == 1 and "%" not in line:
             data.append(line.strip("\n").split(","))
         if "@attribute" in line:
             raw_line = re.sub('\s+', '', line)
             raw_list = raw_line.replace("@attribute", "").strip("}").split("{")
-            goal_key = raw_list[0]
-            new_attr = Attribute(raw_list[0], index, raw_list[1].split(","))
-            index += 1
-            attributes.append(new_attr)
+            attributes.append(raw_list[0])
         if "@data" in line:
             state = 1
 
-def entropy(target_attr, data):
-    countDictionary = {}
-    index = target_attr.index
-    totalValues = len(data)
-    for i in range(0, len(data)):
-        if data[i][index] in countDictionary:
-            countDictionary[data[i][index]] += 1
+def defaultize_attr(attrs, data, tarAttr):
+    countD = {}
+    index = attrs.index(tarAttr)
+    for vector in data:
+        if vector[index] in countD:
+            countD[vector[index]] += 1.0
         else:
-            countDictionary[data[i][index]] = 1.0
-    entropy = 0
-    for key, value in countDictionary.items():
-        entropy -= (value/totalValues) * math.log(value/totalValues, 2)
-    return entropy
+            countD[vector[index]] = 1.0
+    maxVal = 0
+    defaultValue = None
+    for key in countD.keys():
+        if countD[key] > maxVal:
+            maxVal = countD[key]
+            defaultValue = key
+    return defaultValue
 
-def infoGain(data, attr, target_attr):
-    countDictionary = {}
-    index = attr.index
-    gain = 0.0
-    for i in range(0, len(data)):
-        if data[i][index] in countDictionary:
-            countDictionary[data[i][index]] += 1.0
-        else:
-            countDictionary[data[i][index]] = 1.0
-    for value in countDictionary.keys():
-        probability = countDictionary[value] / sum(countDictionary.values())
-        subset = [vector for vector in data if vector[index] == value]
-        gain += probability * entropy(target_attr, subset)
-    return entropy(target_attr, data) - gain
-
-def choose_best(data, attrs, target_attr):
-    gain = 0
-    best_attr = None
+def entropy(attrs, d, tarAttr):
+    countD = {}
+    currentEntropy = 0.0
+    index = 0
     for attr in attrs:
-        if attr.label != target_attr.label:
-            attr_gain = infoGain(data, attr, target_attr)
-            if attr_gain > gain or len(attrs) < 3:
-                gain = attr_gain
-                best_attr = attr
-    return best_attr
-
-def defaultize_attr(data, target_attr):
-    default = ""
-    maxCount = 0
-    index = target_attr.index
-    countDictionary = {}
-    for i in range(0, len(data)):
-        if data[i][index] in countDictionary:
-            countDictionary[data[i][index]] += 1.0
+        if (tarAttr == attr):
+            break
+        ++index
+    for vector in data:
+        if (countD.has_key(vector[index])):
+            countD[vector[index]] += 1.0
         else:
-            countDictionary[data[i][index]] = 1.0
-    for key, value in countDictionary.items():
-        if value > maxCount:
-            maxCount = value
-            default = key
-    return default
+            countD[vector[index]]  = 1.0
 
+    for value in countD.values():
+        currentEntropy += -(value/len(data)) * math.log(value/len(data), 2)
 
-def id3(data, attrs, target_attr, indent):
-    dataset = copy.deepcopy(data)
-    values = target_attr.values
-    defaultValue = defaultize_attr(data, target_attr)
-    indentation = ""
-    for i in range(0, indent):
-        indentation += " "
+    return currentEntropy
+
+def info_gain(attrs, data, attr, tarAttr):
+    countD = {}
+    currentEntropy = 0.0
+    index = attrs.index(attr)
+    for vector in data:
+        if countD.has_key(vector[index]):
+            countD[vector[index]] += 1.0
+        else:
+            countD[vector[index]]  = 1.0
+    for value in countD.keys():
+        prob = countD[value] / sum(countD.values())
+        subset = [vector for vector in data if vector[index] == value]
+        currentEntropy += prob * entropy(attrs, subset, tarAttr)
+    return (entropy(attrs, data, tarAttr) - currentEntropy)
+
+def choose_best(data, attrs, tarAttr):
+    bestAttr = attrs[0]
+    gain = 0;
+    for attr in attrs:
+        newGain = info_gain(attrs, data, attr, tarAttr)
+        if newGain > gain:
+            gain = newGain
+            bestAttr = attr
+    return bestAttr
+
+def get_values(data, attrs, bestAttr):
+    values = []
+    index = attrs.index(bestAttr)
+    for vector in data:
+        if vector[index] not in values:
+            values.append(vector[index])
+    return values
+
+def get_subset(data, attrs, bestAttr, value):
+    subset = [[]]
+    index = attrs.index(bestAttr)
+    for vector in data:
+        if vector[index] == value:
+            newVec = []
+            for i in range(0, len(vector)):
+                if i != index:
+                    newVec.append(vector[i])
+            subset.append(newVec)
+    subset.remove([])
+    return subset
+
+def id3(data, attrs, tarAttr):
+    dataset = data[:]
+    print(attrs)
+    values = [vector[attrs.index(tarAttr)] for vector in dataset]
+    defaultValue = defaultize_attr(attrs, dataset, tarAttr)
     if not dataset or len(attrs) - 1 <= 0:
-        print(indentation + "ANSWER: " + defaultValue)
-    elif len([value[target_attr.index] for value in dataset if value[target_attr.index] == value[0]]) == len(values):
-        print(indentation + "ANSWER: " + values[0])
+        return defaultValue
+    elif values.count(values[0]) == len(values):
+        return values[0]
     else:
-        bestAttr = choose_best(dataset, attrs, target_attr)
-        for value in bestAttr.values:
-            print(indentation + bestAttr.label + ": " + value)
-            for vector in data:
-                if vector[bestAttr.index] == value:
-                    subset = [test for test in data if test[bestAttr.index] == value]
-                    indent += 2
-                    id3(subset, [attr for attr in attrs if attr.label != bestAttr.label], target_attr, indent)
-                    indent -= 2
+        bestAttr = choose_best(dataset, attrs, tarAttr)
+        tree = {bestAttr: {}}
+        for value in get_values(dataset, attrs, bestAttr):
+            subset = get_subset(dataset, attrs, bestAttr, value)
+            newAttrs = attrs[:]
+            newAttrs.remove(bestAttr)
+            subtree = id3(subset, newAttrs, tarAttr)
+            tree[bestAttr][value] = subtree
+    return tree
 
 readData()
-id3(data, attributes, attributes[len(attributes) - 1], 0)
+print attributes, data
+targetAttr = attributes[-1]
+decisionTree = id3(data, attributes, targetAttr)
+print(decisionTree)

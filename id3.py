@@ -30,13 +30,13 @@ def readData():
         if "@data" in line:
             state = 1
 
-def entropy(target_attr, data):
+def entropy(attrs, target_attr, data):
     countDictionary = {}
-    index = target_attr.index
+    index = attrs.index(target_attr)
     totalValues = len(data)
     for i in range(0, len(data)):
         if data[i][index] in countDictionary:
-            countDictionary[data[i][index]] += 1
+            countDictionary[data[i][index]] += 1.0
         else:
             countDictionary[data[i][index]] = 1.0
     entropy = 0
@@ -44,70 +44,84 @@ def entropy(target_attr, data):
         entropy -= (value/totalValues) * math.log(value/totalValues, 2)
     return entropy
 
-def infoGain(data, attr, target_attr):
+def infoGain(attrs, data, attr, target_attr):
     countDictionary = {}
-    index = attr.index
+    index = attrs.index(attr)
     gain = 0.0
     for i in range(0, len(data)):
         if data[i][index] in countDictionary:
             countDictionary[data[i][index]] += 1.0
         else:
             countDictionary[data[i][index]] = 1.0
-    for value in countDictionary.keys():
-        probability = countDictionary[value] / sum(countDictionary.values())
-        subset = [vector for vector in data if vector[index] == value]
-        gain += probability * entropy(target_attr, subset)
-    return entropy(target_attr, data) - gain
+    for key, value in countDictionary.items():
+        probability = value / sum(countDictionary.values())
+        subset = [vector for vector in data if vector[index] == key]
+        gain += probability * entropy(attrs, target_attr, subset)
+    return entropy(attrs, target_attr, data) - gain
 
 def choose_best(data, attrs, target_attr):
     gain = 0
-    best_attr = None
+    best_attr = attrs[0]
     for attr in attrs:
         if attr.label != target_attr.label:
-            attr_gain = infoGain(data, attr, target_attr)
-            if attr_gain > gain or len(attrs) < 3:
+            attr_gain = infoGain(attrs, data, attr, target_attr)
+            if attr_gain > gain:
                 gain = attr_gain
                 best_attr = attr
     return best_attr
 
-def defaultize_attr(data, target_attr):
+def defaultize_attr(attrs, data, target_attr):
     default = ""
     maxCount = 0
-    index = target_attr.index
+    index = attrs.index(target_attr)
     countDictionary = {}
-    for i in range(0, len(data)):
-        if data[i][index] in countDictionary:
-            countDictionary[data[i][index]] += 1.0
+    for vector in data:
+        if vector[index] in countDictionary:
+            countDictionary[vector[index]] += 1.0
         else:
-            countDictionary[data[i][index]] = 1.0
-    for key, value in countDictionary.items():
-        if value > maxCount:
-            maxCount = value
+            countDictionary[vector[index]] = 1.0
+    for key in countDictionary.keys():
+        if countDictionary[key] > maxCount:
+            maxCount = countDictionary[key]
             default = key
     return default
 
+def get_subset(data, attrs, bestAttr, value):
+    subset = [[]]
+    index = attrs.index(bestAttr)
+    for vector in data:
+        if vector[index] == value:
+            newVector = []
+            for i in range(0, len(vector)):
+                if i != index:
+                    newVector.append(vector[i])
+            subset.append(newVector)
+    subset.remove([])
+    return subset
 
-def id3(data, attrs, target_attr, indent):
+def id3(data, attrs, target_attr):
     dataset = copy.deepcopy(data)
     values = target_attr.values
-    defaultValue = defaultize_attr(data, target_attr)
-    indentation = ""
-    for i in range(0, indent):
-        indentation += " "
+    defaultValue = defaultize_attr(attrs, data, target_attr)
     if not dataset or len(attrs) - 1 <= 0:
-        print(indentation + "ANSWER: " + defaultValue)
-    elif len([value[target_attr.index] for value in dataset if value[target_attr.index] == value[0]]) == len(values):
-        print(indentation + "ANSWER: " + values[0])
+        return defaultValue
+    elif values.count(values[0]) == len(values):
+        return values[0]
     else:
         bestAttr = choose_best(dataset, attrs, target_attr)
+        tree = {bestAttr.label:{}}
         for value in bestAttr.values:
-            print(indentation + bestAttr.label + ": " + value)
-            for vector in data:
-                if vector[bestAttr.index] == value:
-                    subset = [test for test in data if test[bestAttr.index] == value]
-                    indent += 2
-                    id3(subset, [attr for attr in attrs if attr.label != bestAttr.label], target_attr, indent)
-                    indent -= 2
+            subset = get_subset(data, attrs, bestAttr, value)
+            newAttr = attrs[:]
+            newAttr.remove(bestAttr)
+            subtree = id3(subset, newAttr, target_attr)
+            tree[bestAttr.label][value] = subtree
+    return tree
+
+def print_tree(tree, indent):
+    print(tree)
+
 
 readData()
-id3(data, attributes, attributes[len(attributes) - 1], 0)
+decisionTree = id3(data, attributes, attributes[len(attributes) - 1])
+print_tree(decisionTree, 0)
